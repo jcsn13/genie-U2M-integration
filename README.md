@@ -15,6 +15,12 @@ Browser → FastAPI (localhost:8000) → OAuth U2M → Databricks Genie API
 
 The user authenticates via browser redirect to Databricks. The app receives the user's token and uses it to call the Genie API — all queries run as the authenticated user.
 
+## Example usage
+
+The following recording shows signing in with Databricks and chatting with Genie in the local UI.
+
+![Genie Chat integration demo](genie_integration.gif)
+
 ## Prerequisites
 
 ### 1. Register an OAuth App in Databricks
