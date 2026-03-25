@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Genie Chat</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@15.0.7/marked.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; height: 100vh; display: flex; flex-direction: column; }
+
+    header { background: #1b3a4b; color: #fff; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    header h1 { font-size: 18px; font-weight: 600; }
+    .header-actions { display: flex; gap: 8px; align-items: center; }
+    .header-actions button { background: rgba(255,255,255,0.15); color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+    .header-actions button:hover { background: rgba(255,255,255,0.25); }
+    .conversation-badge { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.7); padding: 4px 10px; border-radius: 12px; font-size: 11px; }
+
+    #login-view { flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 16px; }
+    #login-view p { color: #666; font-size: 15px; }
+    #login-view button { background: #1b3a4b; color: #fff; border: none; padding: 12px 32px; border-radius: 8px; font-size: 15px; cursor: pointer; }
+    #login-view button:hover { background: #264d63; }
+
+    #chat-view { flex: 1; display: none; flex-direction: column; max-width: 900px; width: 100%; margin: 0 auto; }
+
+    #messages { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+
+    .msg { max-width: 85%; padding: 12px 16px; border-radius: 12px; font-size: 14px; line-height: 1.5; word-wrap: break-word; }
+    .msg.user { align-self: flex-end; background: #1b3a4b; color: #fff; border-bottom-right-radius: 4px; }
+    .msg.genie { align-self: flex-start; background: #fff; color: #333; border: 1px solid #e0e0e0; border-bottom-left-radius: 4px; }
+
+    .msg.genie .md-content p { margin-bottom: 8px; }
+    .msg.genie .md-content p:last-child { margin-bottom: 0; }
+    .msg.genie .md-content strong { font-weight: 600; }
+    .msg.genie .md-content em { font-style: italic; }
+    .msg.genie .md-content ul, .msg.genie .md-content ol { margin: 6px 0 6px 20px; }
+    .msg.genie .md-content li { margin-bottom: 4px; }
+    .msg.genie .md-content code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; font-size: 13px; }
+    .msg.genie .md-content pre { background: #1e1e1e; color: #d4d4d4; padding: 10px; border-radius: 6px; margin: 8px 0; overflow-x: auto; }
+    .msg.genie .md-content pre code { background: none; padding: 0; }
+    .msg.genie .md-content h1, .msg.genie .md-content h2, .msg.genie .md-content h3 { margin: 10px 0 6px; }
+    .msg.genie .md-content blockquote { border-left: 3px solid #ccc; padding-left: 10px; color: #666; margin: 6px 0; }
+
+    .msg .sql-block { background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 6px; margin-top: 10px; font-family: "SF Mono", Monaco, Consolas, monospace; font-size: 12px; white-space: pre-wrap; overflow-x: auto; }
+    .msg .sql-label { font-size: 11px; color: #888; margin-top: 10px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .msg .table-wrapper { overflow-x: auto; margin-top: 10px; max-height: 400px; overflow-y: auto; }
+    .msg table { border-collapse: collapse; font-size: 13px; width: 100%; }
+    .msg th, .msg td { border: 1px solid #ddd; padding: 6px 10px; text-align: left; white-space: nowrap; }
+    .msg th { background: #f0f0f0; font-weight: 600; position: sticky; top: 0; z-index: 1; }
+    .msg tr:nth-child(even) { background: #fafafa; }
+
+    .chart-container { margin-top: 12px; max-width: 600px; max-height: 350px; }
+
+    .toggle-btn { background: none; border: 1px solid #ccc; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; color: #666; margin-top: 8px; }
+    .toggle-btn:hover { background: #f0f0f0; }
+
+    .suggestions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .suggestions button { background: #e8f4f8; color: #1b3a4b; border: 1px solid #b8d8e8; padding: 6px 12px; border-radius: 16px; font-size: 12px; cursor: pointer; }
+    .suggestions button:hover { background: #d0ecf4; }
+
+    .thinking { align-self: flex-start; color: #999; font-style: italic; padding: 12px 16px; }
+    .thinking::after { content: ''; animation: dots 1.5s infinite; }
+    @keyframes dots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+
+    .error-msg { color: #c0392b; background: #fdecea; border: 1px solid #f5c6cb; }
+
+    #input-area { padding: 16px 20px; background: #fff; border-top: 1px solid #e0e0e0; display: flex; gap: 10px; }
+    #input-area input { flex: 1; padding: 12px 16px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; }
+    #input-area input:focus { border-color: #1b3a4b; }
+    #input-area button { background: #1b3a4b; color: #fff; border: none; padding: 12px 24px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+    #input-area button:hover { background: #264d63; }
+    #input-area button:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Genie Chat</h1>
+    <div class="header-actions">
+      <span id="conv-badge" class="conversation-badge" style="display:none"></span>
+      <button id="new-conv-btn" style="display:none" onclick="newConversation()">New Conversation</button>
+      <button id="auth-btn" style="display:none"></button>
+    </div>
+  </header>
+
+  <div id="login-view">
+    <p>Sign in with Databricks to start chatting with Genie</p>
+    <button onclick="window.location='/auth/login'">Sign in with Databricks</button>
+  </div>
+
+  <div id="chat-view">
+    <div id="messages"></div>
+    <div id="input-area">
+      <input id="question" type="text" placeholder="Ask Genie a question..." autocomplete="off" />
+      <button id="send-btn" onclick="send()">Send</button>
+    </div>
+  </div>
+
+  <script>
+    let conversationId = null;
+    let messageCount = 0;
+    let sending = false;
+    let chartCounter = 0;
+
+    const messagesEl = document.getElementById('messages');
+    const questionEl = document.getElementById('question');
+    const sendBtn = document.getElementById('send-btn');
+    const authBtn = document.getElementById('auth-btn');
+    const loginView = document.getElementById('login-view');
+    const chatView = document.getElementById('chat-view');
+    const newConvBtn = document.getElementById('new-conv-btn');
+    const convBadge = document.getElementById('conv-badge');
+
+    const CHART_COLORS = [
+      'rgba(27, 58, 75, 0.8)',
+      'rgba(230, 126, 34, 0.8)',
+      'rgba(46, 134, 171, 0.8)',
+      'rgba(155, 89, 182, 0.8)',
+      'rgba(39, 174, 96, 0.8)',
+      'rgba(231, 76, 60, 0.8)',
+    ];
+    const CHART_BORDERS = [
+      'rgba(27, 58, 75, 1)',
+      'rgba(230, 126, 34, 1)',
+      'rgba(46, 134, 171, 1)',
+      'rgba(155, 89, 182, 1)',
+      'rgba(39, 174, 96, 1)',
+      'rgba(231, 76, 60, 1)',
+    ];
+
+    questionEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !sending) send();
+    });
+
+    function updateConversationUI() {
+      if (conversationId) {
+        newConvBtn.style.display = 'block';
+        convBadge.style.display = 'inline';
+        convBadge.textContent = `${messageCount} message${messageCount !== 1 ? 's' : ''}`;
+      } else {
+        newConvBtn.style.display = 'none';
+        convBadge.style.display = 'none';
+      }
+    }
+
+    function newConversation() {
+      conversationId = null;
+      messageCount = 0;
+      messagesEl.innerHTML = '';
+      updateConversationUI();
+      questionEl.focus();
+    }
+
+    async function checkAuth() {
+      const res = await fetch('/auth/status');
+      const data = await res.json();
+      if (data.authenticated) {
+        loginView.style.display = 'none';
+        chatView.style.display = 'flex';
+        authBtn.textContent = 'Logout';
+        authBtn.style.display = 'block';
+        authBtn.onclick = logout;
+        updateConversationUI();
+        questionEl.focus();
+      } else {
+        loginView.style.display = 'flex';
+        chatView.style.display = 'none';
+        authBtn.style.display = 'none';
+        newConvBtn.style.display = 'none';
+        convBadge.style.display = 'none';
+      }
+    }
+
+    async function logout() {
+      await fetch('/auth/logout', { method: 'POST' });
+      newConversation();
+      checkAuth();
+    }
+
+    function addMessage(html, cls) {
+      const div = document.createElement('div');
+      div.className = 'msg ' + cls;
+      div.innerHTML = html;
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return div;
+    }
+
+    function addThinking() {
+      const div = document.createElement('div');
+      div.className = 'thinking';
+      div.textContent = 'Genie is thinking';
+      messagesEl.appendChild(div);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+      return div;
+    }
+
+    function renderTable(columns, rows) {
+      if (!columns.length) return '';
+      const maxRows = 50;
+      const display = rows.slice(0, maxRows);
+      let html = '<div class="table-wrapper"><table><thead><tr>';
+      columns.forEach(c => html += `<th>${esc(c)}</th>`);
+      html += '</tr></thead><tbody>';
+      display.forEach(row => {
+        html += '<tr>';
+        row.forEach(v => html += `<td>${esc(v ?? '')}</td>`);
+        html += '</tr>';
+      });
+      html += '</tbody></table></div>';
+      if (rows.length > maxRows) {
+        html += `<div style="color:#888;font-size:12px;margin-top:4px">Showing ${maxRows} of ${rows.length} rows</div>`;
+      }
+      return html;
+    }
+
+    function renderChart(chart) {
+      if (!chart) return '';
+      const id = 'chart-' + (++chartCounter);
+      // Store chart config in a data attribute for post-render initialization
+      const config = JSON.stringify(chart);
+      return `<div class="chart-container"><canvas id="${id}" data-chart='${config.replace(/'/g, "&#39;")}'></canvas></div>`;
+    }
+
+    function initCharts(container) {
+      const canvases = container.querySelectorAll('canvas[data-chart]');
+      canvases.forEach(canvas => {
+        const chart = JSON.parse(canvas.dataset.chart);
+        const isPie = chart.type === 'pie' || chart.type === 'doughnut';
+
+        const datasets = chart.datasets.map((ds, i) => ({
+          label: ds.label,
+          data: ds.data,
+          backgroundColor: isPie ? CHART_COLORS.slice(0, ds.data.length) : CHART_COLORS[i % CHART_COLORS.length],
+          borderColor: isPie ? CHART_BORDERS.slice(0, ds.data.length) : CHART_BORDERS[i % CHART_BORDERS.length],
+          borderWidth: 1,
+        }));
+
+        new Chart(canvas, {
+          type: chart.type,
+          data: { labels: chart.labels, datasets },
+          options: {
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+              legend: { display: datasets.length > 1 || isPie },
+            },
+            scales: isPie ? {} : {
+              y: { beginAtZero: true },
+            },
+          },
+        });
+      });
+    }
+
+    function renderSuggestions(questions) {
+      if (!questions || !questions.length) return '';
+      let html = '<div class="suggestions">';
+      questions.forEach(q => {
+        const text = typeof q === 'string' ? q : q.suggestion_text || q.question || String(q);
+        html += `<button onclick="askSuggestion(this.textContent)">${esc(text)}</button>`;
+      });
+      html += '</div>';
+      return html;
+    }
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = String(s);
+      return d.innerHTML;
+    }
+
+    function renderMarkdown(text) {
+      if (!text) return '';
+      return `<div class="md-content">${marked.parse(text)}</div>`;
+    }
+
+    async function send() {
+      const question = questionEl.value.trim();
+      if (!question || sending) return;
+
+      sending = true;
+      sendBtn.disabled = true;
+      questionEl.value = '';
+
+      addMessage(esc(question), 'user');
+      const thinking = addThinking();
+
+      try {
+        const endpoint = conversationId ? '/api/followup' : '/api/ask';
+        const body = conversationId
+          ? { conversation_id: conversationId, question }
+          : { question };
+
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+
+        thinking.remove();
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ detail: res.statusText }));
+          if (res.status === 401) { checkAuth(); return; }
+          addMessage(esc(err.detail || 'Something went wrong'), 'genie error-msg');
+          return;
+        }
+
+        const data = await res.json();
+        conversationId = data.conversation_id;
+        messageCount++;
+        updateConversationUI();
+
+        let html = '';
+
+        // Text response (rendered as markdown)
+        if (data.text) html += renderMarkdown(data.text);
+
+        // SQL description
+        if (data.sql_description) html += `<div style="color:#555;margin-top:6px;font-size:13px">${renderMarkdown(data.sql_description)}</div>`;
+
+        // Chart (rendered before table so it's more prominent)
+        if (data.chart) {
+          html += renderChart(data.chart);
+        }
+
+        // Table with toggle if chart is present
+        if (data.columns && data.columns.length) {
+          const tableId = 'table-' + chartCounter;
+          if (data.chart) {
+            html += `<button class="toggle-btn" onclick="document.getElementById('${tableId}').style.display = document.getElementById('${tableId}').style.display === 'none' ? 'block' : 'none'">Show/Hide Table</button>`;
+            html += `<div id="${tableId}" style="display:none">`;
+          } else {
+            html += `<div id="${tableId}">`;
+          }
+          html += renderTable(data.columns, data.rows || []);
+          html += '</div>';
+        }
+
+        // SQL query (collapsible)
+        if (data.sql) {
+          const sqlId = 'sql-' + chartCounter;
+          html += `<button class="toggle-btn" onclick="document.getElementById('${sqlId}').style.display = document.getElementById('${sqlId}').style.display === 'none' ? 'block' : 'none'">Show/Hide SQL</button>`;
+          html += `<div id="${sqlId}" style="display:none">`;
+          html += `<div class="sql-label">SQL Query</div>`;
+          html += `<div class="sql-block">${esc(data.sql)}</div>`;
+          html += '</div>';
+        }
+
+        // Suggested questions
+        html += renderSuggestions(data.suggested_questions);
+
+        if (!html) html = '<div style="color:#888">No response from Genie</div>';
+        const msgEl = addMessage(html, 'genie');
+
+        // Initialize any charts in the new message
+        initCharts(msgEl);
+
+      } catch (e) {
+        thinking.remove();
+        addMessage(esc('Error: ' + e.message), 'genie error-msg');
+      } finally {
+        sending = false;
+        sendBtn.disabled = false;
+        questionEl.focus();
+      }
+    }
+
+    function askSuggestion(q) {
+      questionEl.value = q;
+      send();
+    }
+
+    checkAuth();
+  </script>
+</body>
+</html>
